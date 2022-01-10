@@ -1,0 +1,112 @@
+/** Lexical elements **/
+
+/* stuff to ignore */
+!whitespace     : ' ' | '\t' | '\n' | '\r' ;
+_line_comment   : '/' '/' {.} '\n' ;
+_block_comment  : '/' '*' {. | '*'} '*' '/' ;
+!comment        : _line_comment | _block_comment ;
+
+/* literals */
+integer_lit     : '0'-'9' {'0'-'9'} ;
+str_lit         : '"' {.} '"' ;
+
+/* number operators */
+addop           : '+' ;
+mulop           : '*' ;
+subop           : '-' ;
+divop           : '/' ;
+
+/* logical operators */
+andop           : '&' '&' ;
+orop            : '|' '|' ;
+notop           : '!' ;
+
+/* comparison operators */
+ltop            : '<' ;
+leqop           : '<' '=' ;
+gtop            : '>' ;
+geqop           : '>' '=' ;
+neqop           : '!' '=' ;
+eqop            : '=' '=' ;
+
+/* special characters */
+lbrace          : '{' ;
+rbrace          : '}' ;
+lpar            : '(' ;
+rpar            : ')' ;
+col             : ':' ;
+assign          : '=' ;
+
+/* variable identifier */
+ident           : ('a'-'z' | 'A'-'Z') {('a'-'z' | 'A'-'Z'| '0'-'9' | '_')} ;
+
+/** Syntax elements **/
+
+<< import (
+    "ql/ast"
+    "ql/token"
+) >>
+
+/* form, start symbol */
+Form        : "form" VarID Block                        << ast.NewFormNode($1, $2, $0.(*token.Token).Pos) >> ;
+
+/* types */
+Type        : "integer"                                 << ast.NewIntegerTypeNode($0) >>
+            | "boolean"                                 << ast.NewBoolTypeNode($0) >>
+            | "string"                                  << ast.NewStringTypeNode($0) >>
+            ;
+
+/* literals */
+Literal     : integer_lit                               << ast.NewIntegerLiteralNode($0) >>
+            | StringLiteraleral
+            | "true"                                    << ast.NewBoolLiteralNode(ast.TRUE, $0.(*token.Token).Pos) >>
+            | "false"                                   << ast.NewBoolLiteralNode(ast.FALSE, $0.(*token.Token).Pos) >>
+            ;
+
+StringLiteraleral  : str_lit                            << ast.NewStringLiteralNode($0) >> ; // need to refer to this from question, thus is separate production
+
+
+/* variables */
+VarDecl     : VarID col Type                            << ast.NewVarDeclNode($0, $2, $1.(*token.Token).Pos) >> ;
+VarID       : ident                                     << ast.NewVarIDNode($0) >> ;
+
+/* expressions */
+Expr        : addop Expr                                << ast.NewPosNode($1, $0.(*token.Token).Pos) >>
+            | subop Expr                                << ast.NewNegNode($1, $0.(*token.Token).Pos) >>
+            | notop Expr                                << ast.NewNotNode($1, $0.(*token.Token).Pos) >>
+            | Expr mulop Expr                           << ast.NewMulNode($0, $2, $1.(*token.Token).Pos) >>
+            | Expr divop Expr                           << ast.NewDivNode($0, $2, $1.(*token.Token).Pos) >>
+            | Expr addop Expr                           << ast.NewAddNode($0, $2, $1.(*token.Token).Pos) >>
+            | Expr subop Expr                           << ast.NewSubNode($0, $2, $1.(*token.Token).Pos) >>
+            | Expr eqop Expr                            << ast.NewEqNode($0, $2, $1.(*token.Token).Pos) >>
+            | Expr neqop Expr                           << ast.NewNEqNode($0, $2, $1.(*token.Token).Pos) >>
+            | Expr gtop Expr                            << ast.NewGTNode($0, $2, $1.(*token.Token).Pos) >>
+            | Expr ltop Expr                            << ast.NewLTNode($0, $2, $1.(*token.Token).Pos) >>
+            | Expr geqop Expr                           << ast.NewGEqNode($0, $2, $1.(*token.Token).Pos) >>
+            | Expr leqop Expr                           << ast.NewLEqNode($0, $2, $1.(*token.Token).Pos) >>
+            | Expr andop Expr                           << ast.NewAndNode($0, $2, $1.(*token.Token).Pos) >>
+            | Expr orop Expr                            << ast.NewOrNode($0, $2, $1.(*token.Token).Pos) >>
+            | lpar Expr rpar                            << $1, nil >>
+            | VarID                                     << ast.NewVarExprNode($0) >>
+            | Literal
+            ;
+
+IfStmt      : "if" lpar Expr rpar Block                 << ast.NewIfNode($2, $4, $0.(*token.Token).Pos) >>
+            | "if" lpar Expr rpar Block "else" Block    << ast.NewIfElseNode($2, $4, $6, $0.(*token.Token).Pos) >>
+            ;
+
+Question    : StringLiteraleral VarDecl                 << ast.NewInputQuestionNode($0, $1) >> // input question
+            | StringLiteraleral VarDecl assign Expr     << ast.NewComputedQuestionNode($0, $1, $3, $2.(*token.Token).Pos) >> // computed question
+            ;
+
+Stmt        : Question 
+            | IfStmt
+            ;
+        
+StmtList    : Stmt                                      << ast.NewStmtListNode($0) >>
+            | StmtList Stmt                             << ast.AppendStmt($0, $1) >>
+            ;
+
+Block       : lbrace StmtList rbrace                    << $1, nil >>
+            | lbrace rbrace                             << ast.NewEmptyStmtListNode($0.(*token.Token).Pos) >>
+            ;
